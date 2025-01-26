@@ -3,7 +3,7 @@
 A flexible AI agent framework for crypto analysis with multiple AI provider support and customizable personalities.
 
 ## Features
-- Multiple AI providers (OpenAI, Anthropic, Google)
+- Multiple AI providers (OpenAI, Anthropic, Google, DeepSeek)
 - Customizable AI personalities
 - Persistent memory with SQLite
 - Real-time crypto market analysis
