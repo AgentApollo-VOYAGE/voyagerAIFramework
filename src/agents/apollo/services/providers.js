@@ -17,6 +17,11 @@ class AIProvider {
         return new Anthropic({ apiKey: this.apiKey });
       case 'google':
         return new GoogleGenerativeAI(this.apiKey);
+      case 'deepseek':
+        return new OpenAI({ 
+          baseURL: 'https://api.deepseek.com',
+          apiKey: this.apiKey 
+        });
       default:
         throw new Error(`Unsupported AI provider: ${this.type}`);
     }
@@ -30,6 +35,8 @@ class AIProvider {
         return this.anthropicGenerate(messages);
       case 'google':
         return this.googleGenerate(messages);
+      case 'deepseek':
+        return this.deepseekGenerate(messages);
       default:
         throw new Error(`Unsupported AI provider: ${this.type}`);
     }
@@ -65,6 +72,14 @@ class AIProvider {
       `${systemMessage}\n\nUser: ${userMessage}`
     );
     return result.response.text();
+  }
+
+  async deepseekGenerate(messages) {
+    const completion = await this.client.chat.completions.create({
+      messages,
+      model: "deepseek-chat"
+    });
+    return completion.choices[0].message.content;
   }
 }
 
