@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Apollo AI Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        #chat-container {
+            height: 600px;
+            overflow-y: auto;
+            border: 1px solid #333;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #2a2a2a;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+        input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #333;
+            background: #2a2a2a;
+            color: #fff;
+        }
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background: #333;
+        }
+        .bot-message {
+            background: #1e4620;
+        }
+        .chart-image {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: block;
+        }
+        .message p {
+            margin: 0;
+            padding: 0;
+        }
+        .message strong {
+            color: #4CAF50;
+        }
+        .message h1, .message h2, .message h3 {
+            margin: 10px 0;
+            color: #4CAF50;
+        }
+        .message ul, .message ol {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Type your message...">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+
+        function addMessage(content, isUser) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            
+            if (!isUser) {
+                // Convert the content to handle both newlines and markdown
+                const lines = content.split('\n');
+                let currentText = '';
+                
+                for (const line of lines) {
+                    if (line.startsWith('<img src="')) {
+                        // If we have accumulated text, render it first
+                        if (currentText) {
+                            const textDiv = document.createElement('div');
+                            textDiv.innerHTML = marked.parse(currentText);
+                            messageDiv.appendChild(textDiv);
+                            currentText = '';
+                        }
+                        
+                        // Handle image
+                        const imgSrc = line.match(/<img src="([^"]+)"/)?.[1];
+                        if (imgSrc) {
+                            const img = document.createElement('img');
+                            img.src = imgSrc;
+                            img.className = 'chart-image';
+                            img.onerror = () => {
+                                img.style.display = 'none';
+                                console.error('Image failed to load');
+                            };
+                            messageDiv.appendChild(img);
+                        }
+                    } else {
+                        // Accumulate text
+                        currentText += line + '\n';
+                    }
+                }
+                
+                // Render any remaining text
+                if (currentText) {
+                    const textDiv = document.createElement('div');
+                    textDiv.innerHTML = marked.parse(currentText);
+                    messageDiv.appendChild(textDiv);
+                }
+            } else {
+                messageDiv.textContent = content;
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            addMessage(message, true);
+            userInput.value = '';
+
+            try {
+                const response = await fetch('http://localhost:3000/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message })
+                });
+
+                const data = await response.json();
+                addMessage(data.response, false);
+            } catch (error) {
+                addMessage('Error: Could not connect to the server', false);
+            }
+        }
+
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
