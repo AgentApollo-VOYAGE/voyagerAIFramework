@@ -1,5 +1,8 @@
 import { fetchTokenMetadata } from '../services/api.js';
 import { formatNumber } from '../utils/formatters.js';
+import { captureTokenChart } from '../services/chart.js';
+import { ENV } from '../../../config/env.js';
+import OpenAI from 'openai';
 import { 
   getRiskDescription, 
   getLiquidityEmoji, 
@@ -40,14 +43,55 @@ export async function enhanceTokenQuery(content) {
         riskLevel = "MODERATE RISK";
       }
 
+      // Capture chart screenshot
+      const chartImage = await captureTokenChart(addressMatch[0]);
+      let technicalAnalysis = '';
+
+      if (chartImage) {
+        // Initialize OpenAI client for chart analysis
+        const openai = new OpenAI({ apiKey: ENV.OPENAI_API_KEY });
+
+        // Get technical analysis from OpenAI
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Analyze this cryptocurrency price chart and provide a brief technical analysis. Focus on key support/resistance levels, trend direction, and potential trading patterns. Keep it concise."
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:image/jpeg;base64,${chartImage}`
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 300
+        });
+
+        technicalAnalysis = completion.choices[0].message.content;
+      } else {
+        console.log('No chart image captured');
+      }
+
       const message = `Token Analysis:
 
 Detailed analysis of ${metadata.name} ($${metadata.symbol}):
-- Recent Buy: $${metadata.symbol}
+${metadata.priceUsd ? `- Current Price: $${formatNumber(metadata.priceUsd)}` : ''}
 - Volume/MCap: ${volumeToMcapRatio.toFixed(1)}%
 - Liquidity/MCap: ${liquidityRatio.toFixed(1)}%
 - Age: ${ageInDays} days
 - Volume Change: ${metadata.priceChange24h.toFixed(2)}%
+
+${chartImage ? `<img src="data:image/jpeg;base64,${chartImage}">` : ''}
+
+Technical Analysis:
+${technicalAnalysis || "Technical analysis unavailable"}
 
 Risk Assessment:
 - 📊 ${riskLevel}: ${getRiskDescription(metadata.marketCap)}
@@ -71,11 +115,13 @@ Risk Assessment:
           volume24h: metadata.volume24h,
           liquidity: metadata.liquidityUsd,
           priceChange24h: metadata.priceChange24h,
-          riskLevel: riskLevel
+          riskLevel: riskLevel,
+          technicalAnalysis: technicalAnalysis || null
         },
       };
     }
   } catch (error) {
+    console.error('Error in token analysis:', error);
     console.error('Error fetching token metadata:', error);
   }
 
