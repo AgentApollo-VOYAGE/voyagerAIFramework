@@ -9,4 +9,5 @@ export const ENV = {
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+  GROK_API_KEY: process.env.GROK_API_KEY,
 }; 
