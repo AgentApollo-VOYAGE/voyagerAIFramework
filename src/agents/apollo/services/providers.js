@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { ENV } from '../../../config/env.js';
 
 class AIProvider {
   constructor(type, apiKey) {
@@ -22,6 +23,11 @@ class AIProvider {
           baseURL: 'https://api.deepseek.com',
           apiKey: this.apiKey 
         });
+      case 'grok':
+        return new OpenAI({
+          baseURL: 'https://api.x.ai/v1',
+          apiKey: this.apiKey
+        });
       default:
         throw new Error(`Unsupported AI provider: ${this.type}`);
     }
@@ -37,6 +43,8 @@ class AIProvider {
         return this.googleGenerate(messages);
       case 'deepseek':
         return this.deepseekGenerate(messages);
+      case 'grok':
+        return this.grokGenerate(messages);
       default:
         throw new Error(`Unsupported AI provider: ${this.type}`);
     }
@@ -81,11 +89,19 @@ class AIProvider {
     });
     return completion.choices[0].message.content;
   }
+
+  async grokGenerate(messages) {
+    const completion = await this.client.chat.completions.create({
+      messages,
+      model: "grok-2-latest"
+    });
+    return completion.choices[0].message.content;
+  }
 }
 
 export const createProvider = () => {
-  const provider = process.env.AI_PROVIDER || 'openai';
-  const apiKey = process.env[`${provider.toUpperCase()}_API_KEY`];
+  const provider = ENV.AI_PROVIDER || 'openai';
+  const apiKey = ENV[`${provider.toUpperCase()}_API_KEY`];
   
   if (!apiKey) {
     throw new Error(`Missing API key for provider: ${provider}`);
