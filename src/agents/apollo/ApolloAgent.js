@@ -27,14 +27,20 @@ export class ApolloAgent {
   async initialize() {
     await database.initialize();
     
-    this.assistant = await this.provider.client.beta.assistants.create({
-      name: this.personality.name,
-      instructions: this.personality.instructions,
-      tools: [{ type: "code_interpreter" }],
-      model: "gpt-4-turbo-preview"
-    });
-
-    this.thread = await this.provider.client.beta.threads.create();
+    if (this.provider.type === 'openai') {
+      // Use OpenAI's assistants API
+      this.assistant = await this.provider.client.beta.assistants.create({
+        name: this.personality.name,
+        instructions: this.personality.instructions,
+        tools: [{ type: "code_interpreter" }],
+        model: "gpt-4-turbo-preview"
+      });
+      this.thread = await this.provider.client.beta.threads.create();
+    } else {
+      // For other providers, just initialize a conversation history
+      this.conversationHistory = [];
+    }
+    
     this.initialized = true;
   }
 
@@ -92,18 +98,35 @@ export class ApolloAgent {
           response = await enhanceSwapQuery(content, analysis);
           break;
         default:
-          await this.provider.client.beta.threads.messages.create(
-            this.thread.id,
-            { role: "user", content }
-          );
+          if (this.provider.type === 'openai') {
+            // Use OpenAI's threads API
+            await this.provider.client.beta.threads.messages.create(
+              this.thread.id,
+              { role: "user", content }
+            );
 
-          const run = await this.provider.client.beta.threads.runs.create(
-            this.thread.id,
-            { assistant_id: this.assistant.id }
-          );
+            const run = await this.provider.client.beta.threads.runs.create(
+              this.thread.id,
+              { assistant_id: this.assistant.id }
+            );
 
-          const messages = await this.waitForCompletion(this.thread.id, run.id);
-          response = messages[0].content[0].text.value;
+            const messages = await this.waitForCompletion(this.thread.id, run.id);
+            response = messages[0].content[0].text.value;
+          } else {
+            // For other providers, use direct message generation
+            this.conversationHistory.push({ role: "user", content });
+            
+            // Prepare messages with system prompt and conversation history
+            const messages = [
+              { role: "system", content: this.personality.instructions },
+              ...this.conversationHistory.slice(-10) // Keep last 10 messages
+            ];
+            
+            response = await this.provider.generateResponse(messages);
+            
+            // Add response to history
+            this.conversationHistory.push({ role: "assistant", content: response });
+          }
       }
 
       // Store the conversation in the background
