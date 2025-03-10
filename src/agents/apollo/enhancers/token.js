@@ -10,6 +10,7 @@ import {
   getVolumeEmoji,
   getVolumeDescription 
 } from '../utils/risk.js';
+import { createProvider } from '../services/providers.js';
 
 export async function enhanceTokenQuery(content) {
   const solanaAddressRegex = /[1-9A-HJ-NP-Za-km-z]{32,44}/;
@@ -48,33 +49,42 @@ export async function enhanceTokenQuery(content) {
       let technicalAnalysis = '';
 
       if (chartImage) {
-        // Initialize OpenAI client for chart analysis
-        const openai = new OpenAI({ apiKey: ENV.OPENAI_API_KEY });
-
-        // Get technical analysis from OpenAI
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "user",
-              content: [
+        try {
+          // Use whatever provider is configured
+          const provider = createProvider();
+          
+          if (provider.type === 'openai' || provider.type === 'grok') {
+            // For providers that support image analysis via OpenAI-compatible API
+            const completion = await provider.client.chat.completions.create({
+              model: provider.type === 'openai' ? "gpt-4o-mini" : "grok-2-latest",
+              messages: [
                 {
-                  type: "text",
-                  text: "Analyze this cryptocurrency price chart and provide a brief technical analysis. Focus on key support/resistance levels, trend direction, and potential trading patterns. Keep it concise."
-                },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: `data:image/jpeg;base64,${chartImage}`
-                  }
+                  role: "user",
+                  content: [
+                    {
+                      type: "text", 
+                      text: "Analyze this cryptocurrency price chart and provide a brief technical analysis."
+                    },
+                    {
+                      type: "image_url",
+                      image_url: {
+                        url: `data:image/jpeg;base64,${chartImage}`
+                      }
+                    }
+                  ]
                 }
-              ]
-            }
-          ],
-          max_tokens: 300
-        });
-
-        technicalAnalysis = completion.choices[0].message.content;
+              ],
+              max_tokens: 300
+            });
+            technicalAnalysis = completion.choices[0].message.content;
+          } else {
+            // For providers that don't support image analysis
+            technicalAnalysis = "Technical analysis unavailable with the current AI provider.";
+          }
+        } catch (error) {
+          console.error('Error generating technical analysis:', error);
+          technicalAnalysis = "Technical analysis generation failed.";
+        }
       } else {
         console.log('No chart image captured');
       }
