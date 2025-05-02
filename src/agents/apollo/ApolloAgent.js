@@ -1,6 +1,7 @@
 import { createProvider } from './services/providers.js';
 import { PERSONALITIES } from '../../config/personalities.js';
 import { database } from './services/database.js';
+import { knowledgeManager } from './services/knowledge.js';
 import { ENV } from '../../config/env.js';
 import { 
   enhanceWalletQuery,
@@ -26,6 +27,7 @@ export class ApolloAgent {
 
   async initialize() {
     await database.initialize();
+    await knowledgeManager.initialize();
     
     if (this.provider.type === 'openai') {
       // Use OpenAI's assistants API
@@ -67,6 +69,67 @@ export class ApolloAgent {
     }
   }
 
+  async retrieveRelevantKnowledge(content) {
+    // Search the knowledge base for relevant information
+    const relevantKnowledge = await knowledgeManager.searchMemory(content);
+    
+    // Format it for inclusion in the prompt
+    let knowledgePrompt = "";
+    
+    if (relevantKnowledge.conversations.length > 0) {
+      knowledgePrompt += "\nRelevant past conversations:\n";
+      relevantKnowledge.conversations.forEach((conv, i) => {
+        knowledgePrompt += `[${i+1}] User: ${conv.input}\nResponse: ${conv.response}\n\n`;
+      });
+    }
+    
+    if (relevantKnowledge.entities.length > 0) {
+      knowledgePrompt += "\nRelevant knowledge:\n";
+      relevantKnowledge.entities.forEach((entity, i) => {
+        const metadata = JSON.parse(entity.metadata || '{}');
+        knowledgePrompt += `[${i+1}] ${entity.entity_type.toUpperCase()}: ${entity.entity_value}`;
+        if (metadata.description) {
+          knowledgePrompt += ` - ${metadata.description}`;
+        }
+        knowledgePrompt += `\n`;
+      });
+    }
+    
+    if (relevantKnowledge.marketEvents.length > 0) {
+      knowledgePrompt += "\nRecent market events:\n";
+      relevantKnowledge.marketEvents.forEach((event, i) => {
+        const date = new Date(event.timestamp).toLocaleDateString();
+        knowledgePrompt += `[${i+1}] ${date} - ${event.event_type}: ${event.description}\n`;
+      });
+    }
+    
+    return knowledgePrompt;
+  }
+  
+  async getUserProfile() {
+    const userInterests = await knowledgeManager.getUserKnowledge();
+    
+    let profilePrompt = "\nUser profile:\n";
+    
+    if (userInterests.tokens.length > 0) {
+      profilePrompt += "Tokens of interest: ";
+      profilePrompt += userInterests.tokens
+        .map(t => `${t.address.substring(0, 8)}... (interactions: ${t.interaction_count})`)
+        .join(", ");
+      profilePrompt += "\n";
+    }
+    
+    if (userInterests.interests.length > 0) {
+      profilePrompt += "Topics of interest: ";
+      profilePrompt += userInterests.interests
+        .map(i => `${i.tag} (${i.count})`)
+        .join(", ");
+      profilePrompt += "\n";
+    }
+    
+    return profilePrompt;
+  }
+
   async sendMessage(content) {
     if (!this.initialized) {
       await this.initialize();
@@ -85,7 +148,9 @@ export class ApolloAgent {
           const tokenResponse = await enhanceTokenQuery(content);
           response = tokenResponse.response;
           if (analysis.address) {
-            await database.updateTokenInteraction(analysis.address);
+            await database.updateTokenInteraction(analysis.address, {
+              sentiment: 0.5 // Neutral sentiment by default
+            });
           }
           break;
         case 'market':
@@ -98,6 +163,10 @@ export class ApolloAgent {
           response = await enhanceSwapQuery(content, analysis);
           break;
         default:
+          // Retrieve relevant knowledge to include in the prompt
+          const relevantKnowledge = await this.retrieveRelevantKnowledge(content);
+          const userProfile = await this.getUserProfile();
+          
           if (this.provider.type === 'openai') {
             // Use OpenAI's threads API
             await this.provider.client.beta.threads.messages.create(
@@ -116,9 +185,11 @@ export class ApolloAgent {
             // For other providers, use direct message generation
             this.conversationHistory.push({ role: "user", content });
             
-            // Prepare messages with system prompt and conversation history
+            // Prepare messages with system prompt, knowledge context, and conversation history
+            const enhancedInstructions = `${this.personality.instructions}\n\n${relevantKnowledge}\n${userProfile}\n\nUse the information above if relevant to the user's query, but don't mention that you're using memory or stored knowledge unless specifically asked.`;
+            
             const messages = [
-              { role: "system", content: this.personality.instructions },
+              { role: "system", content: enhancedInstructions },
               ...this.conversationHistory.slice(-10) // Keep last 10 messages
             ];
             
@@ -129,8 +200,8 @@ export class ApolloAgent {
           }
       }
 
-      // Store the conversation in the background
-      await database.storeConversation(content, response, analysis.type);
+      // Store the conversation and analyze it for knowledge extraction
+      await knowledgeManager.analyzeConversation(content, response, analysis.type);
 
       return response;
 
