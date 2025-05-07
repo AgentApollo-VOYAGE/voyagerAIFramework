@@ -6,40 +6,117 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import net from 'net';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Function to check if a port is in use
+const isPortInUse = async (port) => {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+      .once('error', err => {
+        if (err.code === 'EADDRINUSE') {
+          resolve(true); // Port is in use
+        } else {
+          resolve(false);
+        }
+      })
+      .once('listening', () => {
+        tester.close();
+        resolve(false); // Port is free
+      })
+      .listen(port);
+  });
+};
 
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 });
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.static(__dirname)); // Serve static files from current directory
+// First check if port 3000 is already in use for the web server
+const startWebServer = async () => {
+  try {
+    const port = 3000;
+    const webPortInUse = await isPortInUse(port);
+    
+    if (!webPortInUse) {
+      const app = express();
+      app.use(cors());
+      app.use(express.json());
+      app.use(express.static(__dirname)); // Serve static files from current directory
+      
+      // Serve the chat.html file at the root URL
+      app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'chat.html'));
+      });
+      
+      app.post('/chat', async (req, res) => {
+        const response = await apollo.sendMessage(req.body.message);
+        res.json({ response });
+      });
+      
+      app.listen(port, () => {
+        console.log(`Web server running on http://localhost:${port}`);
+      });
+    } else {
+      console.log(`Web server port ${port} already in use - skipping web server start`);
+    }
+  } catch (error) {
+    console.error("Error starting web server:", error);
+  }
+};
 
-// Initialize Apollo agent
-const apollo = new ApolloAgent();
-await apollo.initialize();
-
-// Serve the chat.html file at the root URL
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'chat.html'));
-});
-
-app.post('/chat', async (req, res) => {
-    const response = await apollo.sendMessage(req.body.message);
-    res.json({ response });
-});
-
-app.listen(3000, () => {
-    console.log('Server running on http://localhost:3000');
-});
+// Check if HIVE port is already in use before starting an instance
+const setupHiveAgent = async () => {
+  // Initialize Apollo agent with HIVE checks
+  const apollo = new ApolloAgent();
+  
+  // Store original initialize method to modify it
+  const originalInitialize = apollo.initialize;
+  
+  // Override the initialize method to check for existing HIVE server
+  apollo.initialize = async function() {
+    // If HIVE is enabled, check if a server is already running on the port
+    if (ENV.ENABLE_HIVE) {
+      const hivePortInUse = await isPortInUse(ENV.HIVE_PORT);
+      
+      if (hivePortInUse) {
+        console.log(`HIVE port ${ENV.HIVE_PORT} already in use - will connect to existing server`);
+        // Set a flag to indicate we should skip server creation but still connect as client
+        ENV.HIVE_SKIP_SERVER_CREATION = true;
+        
+        // Add localhost as a known peer to ensure direct connection to the existing server
+        if (!ENV.HIVE_KNOWN_PEERS || ENV.HIVE_KNOWN_PEERS.length === 0) {
+          console.log(`Adding localhost:${ENV.HIVE_PORT} as a known peer for direct connection`);
+          ENV.HIVE_KNOWN_PEERS = [`ws://localhost:${ENV.HIVE_PORT}`];
+        } else if (!ENV.HIVE_KNOWN_PEERS.includes(`ws://localhost:${ENV.HIVE_PORT}`)) {
+          console.log(`Adding localhost:${ENV.HIVE_PORT} to known peers list`);
+          ENV.HIVE_KNOWN_PEERS.push(`ws://localhost:${ENV.HIVE_PORT}`);
+        }
+      } else {
+        console.log(`HIVE port ${ENV.HIVE_PORT} is free - will start a new HIVE server`);
+        ENV.HIVE_SKIP_SERVER_CREATION = false;
+      }
+    }
+    
+    // Call the original initialize method
+    return await originalInitialize.call(this);
+  };
+  
+  await apollo.initialize();
+  return apollo;
+};
 
 // CLI chat functionality
 async function startChat() {
+  // Start the web server in the background
+  startWebServer();
+  
+  // Initialize Apollo agent with HIVE checks
+  const apollo = await setupHiveAgent();
+  
   console.log(`Starting with personality: ${ENV.AI_PERSONALITY}`);
   console.log("Available personalities (use /switch to change):");
   Object.entries(PERSONALITIES).forEach(([key, p]) => {
