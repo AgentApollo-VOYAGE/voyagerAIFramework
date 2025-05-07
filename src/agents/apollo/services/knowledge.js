@@ -22,6 +22,13 @@ class KnowledgeManager {
       CONTRADICTS: 'contradicts',
       HAS_ATTRIBUTE: 'has_attribute'
     };
+    
+    // Callback function for when new entities are created
+    this.onNewEntity = null;
+    
+    // Track entity counts by category for HIVE trust calculations
+    this.entityCountByCategory = {};
+    this.peerExpertise = {};
   }
   
   async initialize() {
@@ -34,8 +41,37 @@ class KnowledgeManager {
       // Seed some basic crypto concepts if they don't exist yet
       await this.seedBasicConcepts();
       
+      // Load entity counts by category for HIVE trust calculations
+      await this.loadEntityCounts();
+      
       this.initialized = true;
     }
+  }
+  
+  async loadEntityCounts() {
+    // Get counts of entities by type
+    const results = await database.db.all(
+      'SELECT entity_type, COUNT(*) as count FROM knowledge_entities GROUP BY entity_type'
+    );
+    
+    for (const row of results) {
+      const category = this.entityTypeToCategory(row.entity_type);
+      this.entityCountByCategory[category] = row.count;
+    }
+  }
+  
+  entityTypeToCategory(entityType) {
+    // Map entity types to categories
+    const typeToCategory = {
+      'token': 'tokens',
+      'wallet': 'wallets',
+      'project': 'projects',
+      'exchange': 'exchanges',
+      'market_event': 'market_events',
+      'concept': 'concepts'
+    };
+    
+    return typeToCategory[entityType] || entityType;
   }
   
   async seedBasicConcepts() {
@@ -142,7 +178,16 @@ class KnowledgeManager {
     });
     
     // Store entities and create relationships
-    await this.storeEntitiesAndRelationships(entities);
+    const entityIds = await this.storeEntitiesAndRelationships(entities);
+    
+    // Notify about new entities via callback (for HIVE sharing)
+    if (this.onNewEntity && entityIds.length > 0) {
+      for (const entityInfo of entityIds) {
+        if (this.onNewEntity) {
+          await this.onNewEntity(entityInfo);
+        }
+      }
+    }
     
     return {
       conversationId,
@@ -260,17 +305,47 @@ class KnowledgeManager {
   
   /**
    * Store entities and their relationships
+   * @returns {Array} Array of entity information objects
    */
   async storeEntitiesAndRelationships(entities) {
     const entityIds = {};
+    const newEntities = [];
     
     // First pass: store all entities
     for (const entity of entities) {
+      let id;
+      let isNew = false;
+      
       if (entity.existing_id) {
-        entityIds[`${entity.type}:${entity.value}`] = entity.existing_id;
+        id = entity.existing_id;
       } else {
-        const id = await database.storeEntity(entity.type, entity.value, entity.metadata);
-        entityIds[`${entity.type}:${entity.value}`] = id;
+        // Check if entity already exists
+        const existingEntity = await this.getEntityByTypeAndValue(
+          entity.type, 
+          entity.value
+        );
+        
+        if (existingEntity) {
+          id = existingEntity.id;
+        } else {
+          id = await database.storeEntity(entity.type, entity.value, entity.metadata);
+          isNew = true;
+          
+          // Update category counts
+          const category = this.entityTypeToCategory(entity.type);
+          this.entityCountByCategory[category] = (this.entityCountByCategory[category] || 0) + 1;
+        }
+      }
+      
+      entityIds[`${entity.type}:${entity.value}`] = id;
+      
+      if (isNew) {
+        newEntities.push({
+          id,
+          type: entity.type,
+          value: entity.value,
+          metadata: entity.metadata
+        });
       }
     }
     
@@ -303,6 +378,39 @@ class KnowledgeManager {
         }
       }
     }
+    
+    return newEntities;
+  }
+  
+  /**
+   * Get entity by type and value
+   */
+  async getEntityByTypeAndValue(type, value) {
+    return await database.db.get(
+      'SELECT * FROM knowledge_entities WHERE entity_type = ? AND entity_value = ?',
+      [type, value]
+    );
+  }
+  
+  /**
+   * Get entity by ID
+   */
+  async getEntityById(id) {
+    return await database.db.get(
+      'SELECT * FROM knowledge_entities WHERE id = ?',
+      [id]
+    );
+  }
+  
+  /**
+   * Update entity metadata
+   */
+  async updateEntityMetadata(id, metadata) {
+    const metadataString = JSON.stringify(metadata);
+    await database.db.run(
+      'UPDATE knowledge_entities SET metadata = ?, updated_at = ? WHERE id = ?',
+      [metadataString, Date.now(), id]
+    );
   }
   
   /**
@@ -324,6 +432,10 @@ class KnowledgeManager {
       eventEntity.metadata
     );
     
+    // Update category counts
+    const category = this.entityTypeToCategory(eventEntity.type);
+    this.entityCountByCategory[category] = (this.entityCountByCategory[category] || 0) + 1;
+    
     // If this relates to a token, create a relationship
     if (relatedToken) {
       const tokenEntity = await database.db.get(
@@ -339,6 +451,16 @@ class KnowledgeManager {
           impactScore / 10 // Scale to 0-1 range
         );
       }
+    }
+    
+    // Notify about new entity via callback (for HIVE sharing)
+    if (this.onNewEntity) {
+      await this.onNewEntity({
+        id: eventId,
+        type: eventEntity.type,
+        value: eventEntity.value,
+        metadata: eventEntity.metadata
+      });
     }
     
     return eventId;
@@ -384,6 +506,224 @@ class KnowledgeManager {
    */
   async getUserKnowledge() {
     return await database.getUserInterests();
+  }
+  
+  /**
+   * Get knowledge entities by categories (for HIVE sharing)
+   * @param {Array} categories - Categories to retrieve
+   * @param {String} query - Optional query to filter entities
+   * @returns {Array} - Array of entities
+   */
+  async getKnowledgeByCategories(categories, query = '') {
+    const categoryToType = {
+      'tokens': 'token',
+      'wallets': 'wallet',
+      'projects': 'project',
+      'exchanges': 'exchange',
+      'market_events': 'market_event',
+      'concepts': 'concept'
+    };
+    
+    const entityTypes = categories
+      .map(cat => categoryToType[cat] || cat)
+      .filter(type => Object.values(this.entityTypes).includes(type));
+    
+    if (entityTypes.length === 0) {
+      return [];
+    }
+    
+    // Create placeholders for SQL query
+    const placeholders = entityTypes.map(() => '?').join(',');
+    
+    let queryClause = '';
+    let queryParams = [];
+    
+    if (query && query.trim() !== '') {
+      // Very basic query filtering - in a real implementation, you'd use better search
+      queryClause = 'AND (entity_value LIKE ? OR metadata LIKE ?)';
+      const queryPattern = `%${query}%`;
+      queryParams = [queryPattern, queryPattern];
+    }
+    
+    // Get entities
+    const entities = await database.db.all(
+      `SELECT id, entity_type, entity_value, metadata, created_at, updated_at 
+       FROM knowledge_entities 
+       WHERE entity_type IN (${placeholders}) ${queryClause}
+       ORDER BY updated_at DESC 
+       LIMIT 100`,
+      [...entityTypes, ...queryParams]
+    );
+    
+    // Format for sharing
+    return entities.map(entity => ({
+      id: entity.id,
+      type: entity.entity_type,
+      value: entity.entity_value,
+      metadata: JSON.parse(entity.metadata || '{}'),
+      created_at: entity.created_at,
+      updated_at: entity.updated_at
+    }));
+  }
+  
+  /**
+   * Process a shared entity from a HIVE peer
+   * @param {Object} entity - The entity data
+   * @param {String} sourcePeerId - The peer ID that shared the entity
+   * @returns {Boolean} - Whether the entity was processed successfully
+   */
+  async processSharedEntity(entity, sourcePeerId) {
+    try {
+      // Check if we already have this entity
+      const existingEntity = await this.getEntityByTypeAndValue(
+        entity.type,
+        entity.value
+      );
+      
+      if (!existingEntity) {
+        // If we don't have it, simply add it
+        const entityId = await database.storeEntity(
+          entity.type,
+          entity.value,
+          entity.metadata
+        );
+        
+        // Update category counts
+        const category = this.entityTypeToCategory(entity.type);
+        this.entityCountByCategory[category] = (this.entityCountByCategory[category] || 0) + 1;
+        
+        // Track that this entity came from a peer
+        await this.trackPeerEntity(entityId, sourcePeerId);
+        
+        return true;
+      } else {
+        // Only update if our data is older or less detailed
+        const ourMetadata = JSON.parse(existingEntity.metadata || '{}');
+        const theirMetadata = entity.metadata;
+        
+        const ourSize = Object.keys(ourMetadata).length;
+        const theirSize = Object.keys(theirMetadata).length;
+        
+        // Simple heuristic: more fields = better data
+        if (theirSize > ourSize) {
+          await this.updateEntityMetadata(existingEntity.id, theirMetadata);
+          
+          // Track that this entity was updated from a peer
+          await this.trackPeerEntity(existingEntity.id, sourcePeerId);
+          
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error processing shared entity:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Track an entity received from a peer
+   * @param {Number} entityId - The entity ID
+   * @param {String} peerId - The peer ID
+   */
+  async trackPeerEntity(entityId, peerId) {
+    try {
+      // We would need to add a peer_entities table to the database
+      // This is simplified for demonstration
+      console.log(`Entity ${entityId} received from peer ${peerId}`);
+      
+      // Update peer expertise
+      const entity = await this.getEntityById(entityId);
+      if (entity) {
+        const category = this.entityTypeToCategory(entity.entity_type);
+        
+        if (!this.peerExpertise[peerId]) {
+          this.peerExpertise[peerId] = {};
+        }
+        
+        if (!this.peerExpertise[peerId][category]) {
+          this.peerExpertise[peerId][category] = 0;
+        }
+        
+        // Increase expertise for this category
+        this.peerExpertise[peerId][category] += 1;
+        
+        // Cap to reasonable range
+        this.peerExpertise[peerId][category] = Math.min(20, this.peerExpertise[peerId][category]);
+      }
+    } catch (error) {
+      console.error('Error tracking peer entity:', error);
+    }
+  }
+  
+  /**
+   * Process a query using local knowledge (for HIVE collaborative queries)
+   * @param {String} content - The query content
+   * @param {Array} categories - The categories to search in
+   * @returns {Object} - The query result
+   */
+  async processQuery(content, categories) {
+    try {
+      // This is a simplified implementation - in a real system, you'd process
+      // the query more intelligently
+      
+      // Search for relevant information in our knowledge base
+      const searchResults = await this.searchMemory(content, {
+        limit: 10,
+        includeEntities: true
+      });
+      
+      // Format the results for sharing
+      return {
+        conversations: searchResults.conversations.map(conv => ({
+          input: conv.input,
+          response: conv.response,
+          relevance: conv.relevance
+        })),
+        
+        entities: searchResults.entities.map(entity => ({
+          type: entity.entity_type,
+          value: entity.entity_value,
+          metadata: JSON.parse(entity.metadata || '{}')
+        })),
+        
+        marketEvents: searchResults.marketEvents.map(event => ({
+          eventType: event.event_type,
+          relatedToken: event.related_token,
+          description: event.description,
+          impactScore: event.impact_score,
+          timestamp: event.timestamp
+        }))
+      };
+    } catch (error) {
+      console.error('Error processing query for HIVE:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Calculate trust score for a peer in a specific category
+   * @param {String} peerId - The peer ID
+   * @param {String} category - The knowledge category
+   * @returns {Number} - The trust score (0-1)
+   */
+  calculateCategoryTrust(peerId, category) {
+    // Count how many entities we have in this category
+    const entriesInCategory = this.entityCountByCategory[category] || 0;
+    
+    // Basic trust formula: less data means more trust in external sources
+    // More data means we trust our own knowledge more
+    const selfTrust = Math.min(0.9, 0.5 + (entriesInCategory / 100));
+    
+    // For known peers, check their category expertise
+    const peerExpertise = this.peerExpertise[peerId]?.[category] || 0;
+    
+    // Combine factors
+    const peerTrust = 0.5 + (peerExpertise / 20); // Max 0.5 additional trust
+    
+    // Return the higher of self-trust or peer-trust
+    return Math.max(selfTrust, peerTrust);
   }
 }
 
