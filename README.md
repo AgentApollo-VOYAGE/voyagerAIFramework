@@ -3,12 +3,13 @@
 A flexible AI agent framework for crypto analysis with multiple AI provider support and customizable personalities.
 
 ## Features
-- Multiple AI providers (OpenAI, Anthropic, Google, DeepSeek, Grok)
+- Multiple AI providers (OpenAI, Anthropic, Google)
 - Customizable AI personalities
 - Persistent memory with SQLite
 - Real-time crypto market analysis
 - Sentiment analysis
 - Portfolio tracking
+- HIVE collaborative intelligence with automatic peer discovery
 
 ## Installation
 
@@ -27,6 +28,51 @@ Install dependencies:
     ```
     node chat.js
     ```
+
+## HIVE Mind System
+
+The framework includes HIVE Mind - a collaborative intelligence system that allows multiple agents to share knowledge and collaborate on queries.
+
+### HIVE Features
+
+- **Knowledge Sharing**: Agents can share entities and concepts with peers
+- **Collaborative Queries**: Send queries to peers to get additional insights
+- **Automatic Peer Discovery**: Connect to peers through a discovery server
+- **Expertise-Based Matchmaking**: Match with peers based on knowledge specialties
+- **Peer Trust**: Weight knowledge based on peer expertise
+
+### HIVE Usage
+
+1. Enable HIVE in your `.env` file:
+```
+ENABLE_HIVE=true
+HIVE_PORT=3000
+HIVE_AUTO_DISCOVERY=true
+HIVE_DISCOVERY_SERVER=ws://your-discovery-server:8080
+```
+
+2. Run the HIVE demo to test peer collaboration:
+```
+node hive-demo.js
+```
+
+### Discovery Server
+
+The framework includes a discovery server implementation that enables automatic peer discovery and matchmaking:
+
+1. Start the discovery server:
+```
+node start-discovery-server.js
+```
+
+2. Test HIVE discovery with multiple agent instances:
+```
+node test-hive-discovery.js
+```
+
+For detailed documentation on HIVE peer discovery and matchmaking, see:
+- `docs/HIVE_PEER_DISCOVERY.md` - Overview of peer discovery mechanisms
+- `docs/DISCOVERY_SERVER_SETUP.md` - Deployment guide for the discovery server
 
 ## Web Integration
 
@@ -323,3 +369,4 @@ Pull requests welcome! Please check our contributing guidelines.
 ## License
 
 ISC
+
