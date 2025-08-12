@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voyager AI - Background Tasks Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            padding: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .stat-card p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .tasks-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+
+        .tasks-section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .task-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .task-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #3498db;
+        }
+
+        .task-card.running {
+            border-left-color: #27ae60;
+        }
+
+        .task-card.stopped {
+            border-left-color: #e74c3c;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .task-name {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #2c3e50;
+        }
+
+        .task-status {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .task-status.running {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .task-status.stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .task-description {
+            color: #6c757d;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        .task-interval {
+            font-size: 0.9em;
+            color: #495057;
+            margin-bottom: 15px;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #229954;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .btn-warning {
+            background: #f39c12;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #e67e22;
+        }
+
+        .global-actions {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .global-actions h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .global-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #27ae60;
+        }
+
+        .notification.error {
+            background: #e74c3c;
+        }
+
+        .notification.info {
+            background: #3498db;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .dashboard {
+                padding: 20px;
+            }
+
+            .task-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .global-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Voyager AI Framework</h1>
+            <p>Background Tasks Dashboard</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3 id="totalTasks">0</h3>
+                    <p>Total Tasks</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="runningTasks">0</h3>
+                    <p>Running Tasks</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="stoppedTasks">0</h3>
+                    <p>Stopped Tasks</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="enabledTasks">0</h3>
+                    <p>Enabled Tasks</p>
+                </div>
+            </div>
+
+            <div class="tasks-section">
+                <h2>📋 Background Tasks</h2>
+                <div class="task-grid" id="taskGrid">
+                    <!-- Tasks will be populated here -->
+                </div>
+            </div>
+
+            <div class="global-actions">
+                <h2>⚙️ Global Actions</h2>
+                <div class="global-buttons">
+                    <button class="btn btn-success" onclick="startAllTasks()">Start All Tasks</button>
+                    <button class="btn btn-danger" onclick="stopAllTasks()">Stop All Tasks</button>
+                    <button class="btn btn-warning" onclick="restartAllTasks()">Restart All Tasks</button>
+                    <button class="btn btn-primary" onclick="refreshStatus()">Refresh Status</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        let taskStatus = {};
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshStatus();
+            // Auto-refresh every 30 seconds
+            setInterval(refreshStatus, 30000);
+        });
+
+        async function refreshStatus() {
+            try {
+                const response = await fetch('/background-tasks/status');
+                const data = await response.json();
+                taskStatus = data.status;
+                updateDashboard();
+            } catch (error) {
+                showNotification('Error loading task status', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        function updateDashboard() {
+            updateStats();
+            updateTaskGrid();
+        }
+
+        function updateStats() {
+            const tasks = Object.values(taskStatus);
+            const totalTasks = tasks.length;
+            const runningTasks = tasks.filter(task => task.running).length;
+            const stoppedTasks = tasks.filter(task => !task.running).length;
+            const enabledTasks = tasks.filter(task => task.enabled).length;
+
+            document.getElementById('totalTasks').textContent = totalTasks;
+            document.getElementById('runningTasks').textContent = runningTasks;
+            document.getElementById('stoppedTasks').textContent = stoppedTasks;
+            document.getElementById('enabledTasks').textContent = enabledTasks;
+        }
+
+        function updateTaskGrid() {
+            const taskGrid = document.getElementById('taskGrid');
+            taskGrid.innerHTML = '';
+
+            Object.entries(taskStatus).forEach(([taskName, task]) => {
+                const taskCard = createTaskCard(taskName, task);
+                taskGrid.appendChild(taskCard);
+            });
+        }
+
+        function createTaskCard(taskName, task) {
+            const card = document.createElement('div');
+            card.className = `task-card ${task.running ? 'running' : 'stopped'}`;
+
+            const statusClass = task.running ? 'running' : 'stopped';
+            const statusText = task.running ? 'Running' : 'Stopped';
+            const intervalText = formatInterval(task.interval);
+
+            card.innerHTML = `
+                <div class="task-header">
+                    <div class="task-name">${formatTaskName(taskName)}</div>
+                    <div class="task-status ${statusClass}">${statusText}</div>
+                </div>
+                <div class="task-description">${task.description}</div>
+                <div class="task-interval">Interval: ${intervalText}</div>
+                <div class="task-actions">
+                    ${task.running ? 
+                        `<button class="btn btn-danger" onclick="stopTask('${taskName}')">Stop</button>` :
+                        `<button class="btn btn-success" onclick="startTask('${taskName}')">Start</button>`
+                    }
+                </div>
+            `;
+
+            return card;
+        }
+
+        function formatTaskName(name) {
+            return name
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/^./, str => str.toUpperCase())
+                .replace(/([A-Z])/g, ' $1')
+                .trim();
+        }
+
+        function formatInterval(ms) {
+            const seconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+
+            if (hours > 0) {
+                return `${hours}h ${minutes % 60}m`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${seconds % 60}s`;
+            } else {
+                return `${seconds}s`;
+            }
+        }
+
+        async function startTask(taskName) {
+            try {
+                const response = await fetch(`/background-tasks/start/${taskName}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification(`Started task: ${formatTaskName(taskName)}`, 'success');
+                    refreshStatus();
+                } else {
+                    showNotification(result.message, 'error');
+                }
+            } catch (error) {
+                showNotification('Error starting task', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        async function stopTask(taskName) {
+            try {
+                const response = await fetch(`/background-tasks/stop/${taskName}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification(`Stopped task: ${formatTaskName(taskName)}`, 'success');
+                    refreshStatus();
+                } else {
+                    showNotification(result.message, 'error');
+                }
+            } catch (error) {
+                showNotification('Error stopping task', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        async function startAllTasks() {
+            try {
+                const tasks = Object.keys(taskStatus).filter(name => taskStatus[name].enabled && !taskStatus[name].running);
+                
+                for (const taskName of tasks) {
+                    await startTask(taskName);
+                }
+                
+                showNotification('Started all available tasks', 'success');
+            } catch (error) {
+                showNotification('Error starting all tasks', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        async function stopAllTasks() {
+            try {
+                const response = await fetch('/background-tasks/stop-all', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification('Stopped all tasks', 'success');
+                    refreshStatus();
+                } else {
+                    showNotification(result.message, 'error');
+                }
+            } catch (error) {
+                showNotification('Error stopping all tasks', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        async function restartAllTasks() {
+            try {
+                const response = await fetch('/background-tasks/restart', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification('Restarted all tasks', 'success');
+                    refreshStatus();
+                } else {
+                    showNotification(result.message, 'error');
+                }
+            } catch (error) {
+                showNotification('Error restarting all tasks', 'error');
+                console.error('Error:', error);
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
