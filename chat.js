@@ -51,10 +51,41 @@ const startWebServer = async () => {
       app.get('/', (req, res) => {
         res.sendFile(path.join(__dirname, 'chat.html'));
       });
+
+      // Serve the background tasks dashboard
+      app.get('/dashboard', (req, res) => {
+        res.sendFile(path.join(__dirname, 'background-tasks.html'));
+      });
       
       app.post('/chat', async (req, res) => {
         const response = await apollo.sendMessage(req.body.message);
         res.json({ response });
+      });
+
+      // Background task management endpoints
+      app.get('/background-tasks/status', (req, res) => {
+        const status = apollo.getBackgroundTaskStatus();
+        res.json({ status });
+      });
+
+      app.post('/background-tasks/start/:taskName', async (req, res) => {
+        const result = await apollo.startBackgroundTask(req.params.taskName);
+        res.json(result);
+      });
+
+      app.post('/background-tasks/stop/:taskName', (req, res) => {
+        const result = apollo.stopBackgroundTask(req.params.taskName);
+        res.json(result);
+      });
+
+      app.post('/background-tasks/stop-all', (req, res) => {
+        const result = apollo.stopAllBackgroundTasks();
+        res.json(result);
+      });
+
+      app.post('/background-tasks/restart', async (req, res) => {
+        const result = await apollo.restartBackgroundTasks();
+        res.json(result);
       });
       
       app.listen(port, () => {
