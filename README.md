@@ -354,6 +354,374 @@ export default ChatWithPersonality;
 - **Sage**: Ancient wise crypto oracle
 - **Trader**: Fast-talking Wall Street crypto trader
 
+# Background Tasks System
+
+The Voyager AI Framework now includes a comprehensive background task system that enables the AI agent to perform various maintenance, monitoring, and learning tasks automatically in the background.
+
+## Overview
+
+The background task system provides:
+
+- **Automatic Maintenance**: Database cleanup, knowledge base optimization
+- **Real-time Monitoring**: Market events, token prices, system performance
+- **Continuous Learning**: User preference analysis, conversation pattern recognition
+- **Network Synchronization**: HIVE mind peer communication and knowledge sharing
+- **Data Analysis**: Sentiment analysis, trend detection, performance metrics
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Background Task Manager                  │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │ Maintenance │ │ Monitoring  │ │ Learning    │           │
+│  │   Tasks     │ │   Tasks     │ │   Tasks     │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+│                                                             │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │ Networking  │ │ Analysis    │ │ Custom      │           │
+│  │   Tasks     │ │   Tasks     │ │   Tasks     │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Database & Services                      │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
+│  │   SQLite    │ │ Knowledge   │ │ HIVE P2P    │           │
+│  │  Database   │ │  Manager    │ │  Network    │           │
+│  └─────────────┘ └─────────────┘ └─────────────┘           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Available Tasks
+
+### 1. Knowledge Maintenance
+- **Interval**: 5 minutes
+- **Purpose**: Keeps the knowledge base clean and optimized
+- **Actions**:
+  - Clean up old semantic vectors (older than 30 days)
+  - Remove weak entity relationships (strength < 0.1)
+  - Update knowledge relevance scores based on usage
+
+### 2. Market Monitoring
+- **Interval**: 2 minutes
+- **Purpose**: Tracks market events and trends
+- **Actions**:
+  - Check for new market events
+  - Update token sentiment scores
+  - Analyze market trends from stored events
+
+### 3. User Learning
+- **Interval**: 10 minutes
+- **Purpose**: Learns from user interactions and preferences
+- **Actions**:
+  - Analyze conversation patterns
+  - Update user preferences
+  - Learn from interaction patterns
+
+### 4. HIVE Synchronization
+- **Interval**: 30 seconds
+- **Purpose**: Synchronizes with HIVE mind peers
+- **Actions**:
+  - Share new knowledge with peers
+  - Request knowledge from peers
+  - Update peer status
+
+### 5. Database Cleanup
+- **Interval**: 1 hour
+- **Purpose**: Maintains database performance
+- **Actions**:
+  - Remove conversations older than 90 days
+  - Run database optimization (VACUUM, ANALYZE)
+  - Archive old data
+
+### 6. Sentiment Analysis
+- **Interval**: 15 minutes
+- **Purpose**: Analyzes conversation sentiment
+- **Actions**:
+  - Analyze recent conversations for sentiment
+  - Update sentiment trends
+  - Generate sentiment reports
+
+### 7. Token Price Monitoring
+- **Interval**: 1 minute
+- **Purpose**: Monitors token prices and alerts on changes
+- **Status**: Disabled by default (to avoid API rate limits)
+- **Actions**:
+  - Fetch current token prices
+  - Detect significant price changes
+  - Generate alerts for price movements
+
+### 8. Conversation Archiving
+- **Interval**: 24 hours
+- **Purpose**: Archives old conversations to save storage
+- **Actions**:
+  - Move old conversations to archive tables
+  - Compress archived data
+  - Clean up storage space
+
+### 9. Performance Metrics
+- **Interval**: 5 minutes
+- **Purpose**: Collects and stores performance data
+- **Actions**:
+  - Monitor system performance
+  - Track response times
+  - Store performance metrics
+
+### 10. Knowledge Sharing
+- **Interval**: 30 minutes
+- **Purpose**: Shares knowledge with external systems
+- **Status**: Disabled by default
+- **Actions**:
+  - Export knowledge to external APIs
+  - Share insights with other systems
+  - Sync with external knowledge bases
+
+## Configuration
+
+### Task Configuration File
+All task settings are defined in `src/config/background-tasks.js`:
+
+```javascript
+export const BACKGROUND_TASK_CONFIG = {
+  knowledgeMaintenance: {
+    interval: 5 * 60 * 1000, // 5 minutes
+    enabled: true,
+    description: 'Maintain and optimize knowledge base',
+    priority: 'high',
+    category: 'maintenance'
+  },
+  // ... more tasks
+};
+```
+
+### Environment Variables
+Some tasks can be controlled via environment variables:
+
+- `ENABLE_HIVE`: Controls HIVE synchronization tasks
+- Task-specific variables can be added as needed
+
+### Priority Levels
+- **High**: Critical tasks that should run frequently
+- **Medium**: Important tasks that run periodically
+- **Low**: Background tasks that run occasionally
+
+### Categories
+- **Maintenance**: System maintenance and optimization
+- **Monitoring**: Real-time monitoring and alerting
+- **Learning**: Machine learning and pattern recognition
+- **Networking**: Communication and synchronization
+- **Analysis**: Data analysis and processing
+
+## Usage
+
+### Starting the System
+The background task system starts automatically when the Apollo agent initializes:
+
+```javascript
+const apollo = new ApolloAgent();
+await apollo.initialize(); // Background tasks start automatically
+```
+
+### Web Dashboard
+Access the background tasks dashboard at `http://localhost:3000/dashboard`
+
+Features:
+- Real-time task status monitoring
+- Start/stop individual tasks
+- Global task management
+- Task statistics and metrics
+
+### API Endpoints
+The system provides REST API endpoints for programmatic control:
+
+```bash
+# Get task status
+GET /background-tasks/status
+
+# Start a specific task
+POST /background-tasks/start/:taskName
+
+# Stop a specific task
+POST /background-tasks/stop/:taskName
+
+# Stop all tasks
+POST /background-tasks/stop-all
+
+# Restart all tasks
+POST /background-tasks/restart
+```
+
+### Programmatic Control
+You can control tasks programmatically through the Apollo agent:
+
+```javascript
+// Get task status
+const status = apollo.getBackgroundTaskStatus();
+
+// Start a specific task
+const result = await apollo.startBackgroundTask('knowledgeMaintenance');
+
+// Stop all tasks
+const result = apollo.stopAllBackgroundTasks();
+
+// Restart all tasks
+const result = await apollo.restartBackgroundTasks();
+```
+
+## Adding Custom Tasks
+
+### 1. Define the Task Configuration
+Add your task to `src/config/background-tasks.js`:
+
+```javascript
+export const BACKGROUND_TASK_CONFIG = {
+  // ... existing tasks
+  myCustomTask: {
+    interval: 10 * 60 * 1000, // 10 minutes
+    enabled: true,
+    description: 'My custom background task',
+    priority: 'medium',
+    category: 'monitoring'
+  }
+};
+```
+
+### 2. Implement the Task Function
+Add your task implementation to `src/agents/apollo/services/background-tasks.js`:
+
+```javascript
+registerTasks() {
+  // ... existing tasks
+  
+  // My custom task
+  this.registerTask('myCustomTask', async () => {
+    try {
+      console.log('Running my custom task...');
+      
+      // Your task logic here
+      await this.performCustomTask();
+      
+      console.log('My custom task completed');
+    } catch (error) {
+      console.error('Error in my custom task:', error);
+    }
+  });
+}
+
+async performCustomTask() {
+  // Implement your task logic here
+  console.log('Performing custom task operations...');
+}
+```
+
+### 3. Register the Task
+The task will be automatically registered when the background task manager initializes.
+
+## Monitoring and Debugging
+
+### Logs
+All background tasks log their activities to the console:
+
+```
+Running knowledge maintenance...
+Knowledge maintenance completed
+Running market monitoring...
+Market monitoring completed
+```
+
+### Error Handling
+Tasks are designed to be fault-tolerant:
+- Individual task failures don't stop other tasks
+- Errors are logged but don't crash the system
+- Failed tasks will retry on their next scheduled run
+
+### Performance Monitoring
+The system includes built-in performance monitoring:
+- Task execution times
+- Success/failure rates
+- Resource usage tracking
+
+## Best Practices
+
+### 1. Task Design
+- Keep tasks focused and single-purpose
+- Use appropriate intervals (not too frequent, not too rare)
+- Handle errors gracefully
+- Log important events
+
+### 2. Resource Management
+- Be mindful of database connections
+- Avoid memory leaks in long-running tasks
+- Use appropriate timeouts for external API calls
+
+### 3. Configuration
+- Use the configuration file for all task settings
+- Enable/disable tasks based on environment needs
+- Adjust intervals based on system resources
+
+### 4. Monitoring
+- Regularly check task logs
+- Monitor system performance
+- Use the web dashboard for real-time monitoring
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Tasks not starting**
+   - Check if the task is enabled in configuration
+   - Verify the Apollo agent is properly initialized
+   - Check console logs for error messages
+
+2. **High resource usage**
+   - Increase task intervals
+   - Optimize task implementations
+   - Disable non-critical tasks
+
+3. **Database errors**
+   - Check database connection
+   - Verify table structure
+   - Check for concurrent access issues
+
+4. **HIVE synchronization issues**
+   - Verify HIVE is enabled (`ENABLE_HIVE=true`)
+   - Check network connectivity
+   - Verify peer configuration
+
+### Debug Mode
+Enable debug logging by setting the log level in your environment:
+
+```javascript
+// Add to your environment configuration
+DEBUG_BACKGROUND_TASKS=true
+```
+
+## Future Enhancements
+
+### Planned Features
+- Task scheduling with cron-like expressions
+- Task dependencies and workflows
+- Advanced monitoring and alerting
+- Task performance analytics
+- Distributed task execution
+- Task result caching
+- Webhook notifications for task events
+
+### Extensibility
+The system is designed to be easily extensible:
+- Plugin architecture for custom tasks
+- External task execution
+- Integration with external monitoring systems
+- Custom task categories and priorities
+
+## Conclusion
+
+The background task system provides a robust foundation for automated AI operations. It enables the Voyager AI Framework to maintain itself, learn continuously, and provide better user experiences through proactive monitoring and optimization.
+
+
 ## API Reference
 
 Key classes and methods referenced from: `src/agents/apollo/ApolloAgent.js`
@@ -369,4 +737,6 @@ Pull requests welcome! Please check our contributing guidelines.
 ## License
 
 ISC
+
+
 
