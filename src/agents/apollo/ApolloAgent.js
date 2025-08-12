@@ -3,6 +3,7 @@ import { PERSONALITIES } from '../../config/personalities.js';
 import { database } from './services/database.js';
 import { knowledgeManager } from './services/knowledge.js';
 import { hiveP2P } from './services/hive-p2p.js';
+import { backgroundTaskManager } from './services/background-tasks.js';
 import { ENV } from '../../config/env.js';
 import { 
   enhanceWalletQuery,
@@ -33,6 +34,9 @@ export class ApolloAgent {
   async initialize() {
     await database.initialize();
     await knowledgeManager.initialize();
+    
+    // Initialize background task manager
+    await backgroundTaskManager.initialize();
     
     // Initialize HIVE if enabled
     if (this.enableHive) {
@@ -451,6 +455,9 @@ export class ApolloAgent {
    * Close the agent and its components
    */
   async close() {
+    // Stop background tasks
+    backgroundTaskManager.stop();
+    
     // Close HIVE if initialized
     if (this.enableHive && this.hiveInitialized) {
       await hiveP2P.close();
@@ -458,5 +465,52 @@ export class ApolloAgent {
     
     // Close database connection
     await database.close();
+  }
+
+  // Background task management methods
+  
+  /**
+   * Get status of all background tasks
+   */
+  getBackgroundTaskStatus() {
+    return backgroundTaskManager.getTaskStatus();
+  }
+
+  /**
+   * Start a specific background task
+   */
+  async startBackgroundTask(taskName) {
+    const config = backgroundTaskManager.taskConfig[taskName];
+    if (config && config.enabled) {
+      await backgroundTaskManager.startTask(taskName, config.interval);
+      return { success: true, message: `Started task: ${taskName}` };
+    } else {
+      return { success: false, message: `Task ${taskName} not found or disabled` };
+    }
+  }
+
+  /**
+   * Stop a specific background task
+   */
+  stopBackgroundTask(taskName) {
+    backgroundTaskManager.stopTask(taskName);
+    return { success: true, message: `Stopped task: ${taskName}` };
+  }
+
+  /**
+   * Stop all background tasks
+   */
+  stopAllBackgroundTasks() {
+    backgroundTaskManager.stop();
+    return { success: true, message: 'Stopped all background tasks' };
+  }
+
+  /**
+   * Restart all background tasks
+   */
+  async restartBackgroundTasks() {
+    backgroundTaskManager.stop();
+    await backgroundTaskManager.start();
+    return { success: true, message: 'Restarted all background tasks' };
   }
 }
